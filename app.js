@@ -4,7 +4,7 @@ var mongoose = require('mongoose');
 mongoose.Promise = global.Promise;
 var sessions = require('client-sessions');
 var bcrypt = require('bcryptjs');
-var csurf = require('csurf');
+var csrf = require('csurf');
 
 
 var Schema = mongoose.Schema;
@@ -39,8 +39,6 @@ app.use(sessions({
 	activeDuration: 5 * 60 * 1000
 }));
 
-app.use(csurf());
-
 app.use(function(req, res, next){
 	if(req.session && req.session.user){
 		User.findOne({email: req.session.user.email}, function(err, user){
@@ -49,12 +47,22 @@ app.use(function(req, res, next){
 				delete req.user.password;
 				req.session.user = req.user;
 				res.locals.user = req.user;
-			}
+			} 
 			next();
 		});
 	} else {
 		next();
 	}
+});
+
+app.use(csrf());
+
+// error handler
+app.use(function (err, req, res, next) {
+    if (err.code !== 'EBADCSRFTOKEN') return next(err)
+     // handle CSRF token errors here
+    res.status(403)
+    res.send('session has expired or form tampered with')
 });
 
 function requireLogin(req, res, next){
@@ -70,7 +78,7 @@ app.get('/', function(req, res){
 });
 
 app.get('/register', function(req, res){
-	res.render('register.jade', {csrfToken: req.csrfToken() });
+	res.render('register.jade', { csrfToken: req.csrfToken() });
 });
 
 app.post('/register', function(req, res){
@@ -97,19 +105,19 @@ app.post('/register', function(req, res){
 });
 
 app.get('/login', function(req, res){
-	res.render('login.jade');
+	res.render('login.jade', { csrfToken: req.csrfToken() });
 });
 
 app.post('/login', function(req, res){
 	User.findOne({email: req.body.email}, function(err, user){
 		if(!user){
-			res.render('login.jade', {error: 'Not valid password or email'});
+			res.render('login.jade', {error: 'Not valid password or email', csrfToken: req.csrfToken()});
 		} else {
 			if(bcrypt.compareSync(req.body.password, user.password)){
 				req.session.user = user; 
 				res.redirect('/dashboard');
 			} else {
-				res.render('login.jade', {error: 'Not valid password or email'});
+				res.render('login.jade', {error: 'Not valid password or email', csrfToken: req.csrfToken()});
 			}
 		}
 	});
